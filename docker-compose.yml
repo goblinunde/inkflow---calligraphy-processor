@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # InkFlow Web Application
+  inkflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inkflow-calligraphy
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - inkflow-network
+    volumes:
+      # Optional: Mount for logs
+      - ./logs:/var/log/nginx
+    labels:
+      - "com.inkflow.description=InkFlow Calligraphy Processor"
+      - "com.inkflow.version=1.0.0"
+
+networks:
+  inkflow-network:
+    driver: bridge
+
+# Optional: Add volumes for persistent data if needed
+volumes:
+  nginx_logs:
+    driver: local
