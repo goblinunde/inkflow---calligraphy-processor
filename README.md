@@ -103,4 +103,4 @@ MIT
 
 ---
 
-**InkFlow Team** © 2025
+**InkFlow Team** © 2026
