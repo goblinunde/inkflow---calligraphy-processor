@@ -9,11 +9,13 @@ import { AIProvider } from '../services/aiProviders';
 import { FiltersPanel } from './FiltersPanel';
 import { FilterType } from '../services/filtersService';
 import { PhotoToolsPanel } from './PhotoEditor/PhotoToolsPanel';
+import type { TranslationSet } from '../services/translations';
+import type { Watermark } from '../types';
 
 interface SidebarProps {
-    t: any;
+    t: TranslationSet;
     settings: ProcessSettings;
-    handleSettingsChange: (key: keyof ProcessSettings, value: number | boolean | string) => void;
+    handleSettingsChange: <K extends keyof ProcessSettings>(key: K, value: ProcessSettings[K]) => void;
     onReset: () => void;
     originalImage: string | null;
     isAiProcessing: boolean;
@@ -30,10 +32,10 @@ interface SidebarProps {
     onImageWatermarkUpload: (file: File) => void;
     onAddTextWatermark: (text: string, fontSize: number, fontFamily: string, color: string) => void;
     uploadStatus: { type: 'success' | 'error', message: string } | null;
-    watermarks: any[];
+    watermarks: Watermark[];
     selectedWatermarkId: string | null;
     onSelectWatermark: (id: string | null) => void;
-    onUpdateWatermark: (id: string, changes: any) => void;
+    onUpdateWatermark: (id: string, changes: Partial<Watermark>) => void;
     onRemoveWatermark: (id: string) => void;
     onMoveWatermarkUp: (id: string) => void;
     onMoveWatermarkDown: (id: string) => void;
@@ -190,7 +192,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <div className="grid grid-cols-2 gap-2 relative z-10">
                             <button
                                 onClick={() => {
-                                    console.log('Color preset clicked: color-pure-black');
                                     onApplyColorPreset('color-pure-black');
                                 }}
                                 className="py-2 px-2 text-[11px] rounded border bg-[var(--bg-secondary)] border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-[var(--fg-primary)] transition-all active:scale-95 cursor-pointer pointer-events-auto"
@@ -199,7 +200,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </button>
                             <button
                                 onClick={() => {
-                                    console.log('Color preset clicked: color-antique-brown');
                                     onApplyColorPreset('color-antique-brown');
                                 }}
                                 className="py-2 px-2 text-[11px] rounded border bg-[var(--bg-secondary)] border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-[var(--fg-primary)] transition-all active:scale-95 cursor-pointer pointer-events-auto"
@@ -208,7 +208,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </button>
                             <button
                                 onClick={() => {
-                                    console.log('Color preset clicked: color-vintage-gray');
                                     onApplyColorPreset('color-vintage-gray');
                                 }}
                                 className="py-2 px-2 text-[11px] rounded border bg-[var(--bg-secondary)] border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-[var(--fg-primary)] transition-all active:scale-95 cursor-pointer pointer-events-auto"
@@ -217,7 +216,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </button>
                             <button
                                 onClick={() => {
-                                    console.log('Color preset clicked: color-modern-cool');
                                     onApplyColorPreset('color-modern-cool');
                                 }}
                                 className="py-2 px-2 text-[11px] rounded border bg-[var(--bg-secondary)] border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-[var(--fg-primary)] transition-all active:scale-95 cursor-pointer pointer-events-auto"
@@ -226,7 +224,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </button>
                             <button
                                 onClick={() => {
-                                    console.log('Color preset clicked: color-warm-sepia');
                                     onApplyColorPreset('color-warm-sepia');
                                 }}
                                 className="py-2 px-2 text-[11px] rounded border bg-[var(--bg-secondary)] border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-[var(--fg-primary)] transition-all active:scale-95 cursor-pointer pointer-events-auto"
@@ -235,7 +232,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </button>
                             <button
                                 onClick={() => {
-                                    console.log('Color preset clicked: color-vivid');
                                     onApplyColorPreset('color-vivid');
                                 }}
                                 className="py-2 px-2 text-[11px] rounded border bg-[var(--bg-secondary)] border-[var(--border-default)] text-[var(--fg-secondary)] hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:text-[var(--fg-primary)] transition-all active:scale-95 cursor-pointer pointer-events-auto"
@@ -261,17 +257,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                         : [...stackedFilters, filter];
                                     setStackedFilters(newStacked);
                                     // 💡 同步到 settings 以触发 processor 重新处理
-                                    handleSettingsChange('stackedFilters' as any, newStacked as any);
+                                    handleSettingsChange('stackedFilters', newStacked);
                                 } else if (filter === null) {
                                     // 清除所有滤镜
                                     setStackedFilters([]);
                                     handleSettingsChange('filter', '');
-                                    handleSettingsChange('stackedFilters' as any, [] as any);
+                                    handleSettingsChange('stackedFilters', []);
                                 } else {
                                     // 普通模式：单个滤镜
                                     setStackedFilters([]);
                                     handleSettingsChange('filter', filter || '');
-                                    handleSettingsChange('stackedFilters' as any, [] as any);
+                                    handleSettingsChange('stackedFilters', []);
                                 }
                             }}
                             onIntensityChange={(intensity) => handleSettingsChange('filterIntensity', intensity)}

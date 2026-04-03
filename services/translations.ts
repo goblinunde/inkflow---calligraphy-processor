@@ -227,3 +227,5 @@ export const translations = {
         }
     }
 };
+
+export type TranslationSet = typeof translations.en;

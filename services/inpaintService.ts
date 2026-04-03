@@ -2,7 +2,6 @@
  * Inpainting Service - 内容感知填充/去水印服务
  * 💡 使用 OpenCV.js 的 inpaint 算法实现专业级内容修复
  */
-import cv from '@techstark/opencv-js';
 import { initOpenCV, isCvReady } from './opencvService';
 
 export type InpaintMethod = 'telea' | 'ns';
@@ -28,6 +27,8 @@ export const inpaint = async (
     if (!isCvReady()) {
         await initOpenCV();
     }
+
+    const cv = await import('@techstark/opencv-js');
 
     const { width, height } = imageData;
     const { method, radius } = options;

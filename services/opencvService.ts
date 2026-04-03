@@ -2,27 +2,47 @@
  * OpenCV.js Service Wrapper
  * 💡 提供对 OpenCV WebAssembly 库的封装，实现 PS 级别图像处理
  */
-import cv from '@techstark/opencv-js';
 
-// 💡 OpenCV.js 需要异步加载，使用 Promise 管理加载状态
+type OpenCVModule = typeof import('@techstark/opencv-js');
+
+let cvModule: OpenCVModule | null = null;
 let cvReady = false;
-let cvReadyPromise: Promise<void>;
+let cvReadyPromise: Promise<void> | null = null;
 
-export const initOpenCV = (): Promise<void> => {
-    if (cvReady) return Promise.resolve();
+const loadOpenCVModule = async (): Promise<OpenCVModule> => {
+    if (cvModule) {
+        return cvModule;
+    }
+
+    const module = await import('@techstark/opencv-js');
+    cvModule = module;
+    return cvModule;
+};
+
+const getOpenCVSync = (): OpenCVModule => {
+    if (!cvModule) {
+        throw new Error('OpenCV is not initialized yet. Call initOpenCV() before using it.');
+    }
+
+    return cvModule;
+};
+
+export const initOpenCV = async (): Promise<void> => {
+    if (cvReady) return;
     if (cvReadyPromise) return cvReadyPromise;
 
-    cvReadyPromise = new Promise((resolve) => {
+    cvReadyPromise = loadOpenCVModule().then((cv) => new Promise<void>((resolve) => {
         if (cv.Mat) {
             cvReady = true;
             resolve();
-        } else {
-            cv.onRuntimeInitialized = () => {
-                cvReady = true;
-                resolve();
-            };
+            return;
         }
-    });
+
+        cv.onRuntimeInitialized = () => {
+            cvReady = true;
+            resolve();
+        };
+    }));
 
     return cvReadyPromise;
 };
@@ -38,6 +58,7 @@ export const gaussianBlur = (
     imageData: ImageData,
     sigma: number = 2
 ): ImageData => {
+    const cv = getOpenCVSync();
     const src = cv.matFromImageData(imageData);
     const dst = new cv.Mat();
 
@@ -60,6 +81,7 @@ export const bilateralFilter = (
     sigmaColor: number = 75,
     sigmaSpace: number = 75
 ): ImageData => {
+    const cv = getOpenCVSync();
     const src = cv.matFromImageData(imageData);
     const dst = new cv.Mat();
 
@@ -80,6 +102,7 @@ export const cannyEdgeDetection = (
     threshold1: number = 50,
     threshold2: number = 150
 ): ImageData => {
+    const cv = getOpenCVSync();
     const src = cv.matFromImageData(imageData);
     const gray = new cv.Mat();
     const edges = new cv.Mat();
@@ -101,6 +124,7 @@ export const cannyEdgeDetection = (
  * 直方图均衡化 - 自动优化对比度
  */
 export const histogramEqualization = (imageData: ImageData): ImageData => {
+    const cv = getOpenCVSync();
     const src = cv.matFromImageData(imageData);
     const ycrcb = new cv.Mat();
     const channels = new cv.MatVector();
@@ -134,6 +158,7 @@ export const adaptiveThreshold = (
     blockSize: number = 11,
     C: number = 2
 ): ImageData => {
+    const cv = getOpenCVSync();
     const src = cv.matFromImageData(imageData);
     const gray = new cv.Mat();
     const binary = new cv.Mat();
@@ -167,6 +192,7 @@ export const morphologyOperation = (
     operation: 'dilate' | 'erode' | 'open' | 'close',
     kernelSize: number = 3
 ): ImageData => {
+    const cv = getOpenCVSync();
     const src = cv.matFromImageData(imageData);
     const dst = new cv.Mat();
     const kernel = cv.getStructuringElement(
@@ -200,6 +226,7 @@ export const morphologyOperation = (
  * 锐化 - 使用拉普拉斯算子
  */
 export const sharpen = (imageData: ImageData, amount: number = 1): ImageData => {
+    const cv = getOpenCVSync();
     const src = cv.matFromImageData(imageData);
     const dst = new cv.Mat();
     const blurred = new cv.Mat();
@@ -216,7 +243,7 @@ export const sharpen = (imageData: ImageData, amount: number = 1): ImageData => 
 
 // === 辅助函数 ===
 
-function imageDataFromMat(mat: any): ImageData {
+function imageDataFromMat(mat: { data: Uint8Array; cols: number; rows: number }): ImageData {
     const data = new Uint8ClampedArray(mat.data);
     return new ImageData(data, mat.cols, mat.rows);
 }

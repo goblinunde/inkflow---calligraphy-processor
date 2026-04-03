@@ -1,3 +1,15 @@
+import type { FilterType } from './services/filtersService';
+
+export interface Dimensions {
+  width: number;
+  height: number;
+}
+
+export interface UploadStatus {
+  type: 'success' | 'error';
+  message: string;
+}
+
 export interface ProcessSettings {
   threshold: number; // 0-255, cutoff for white background
   strength: number; // -3 to 5. Negative = Thin (Erosion), Positive = Bold (Dilation)
@@ -40,7 +52,7 @@ export interface ProcessSettings {
   // Phase 6: 艺术滤镜
   filter?: 'vintage' | 'inkwash' | 'sepia' | 'highcontrast' | 'invert' | 'warm' | 'cool' | null;
   filterIntensity: number;        // 滤镜强度 (0-100)
-  stackedFilters?: string[];      // 💡 叠加的滤镜列表
+  stackedFilters?: FilterType[];  // 💡 叠加的滤镜列表
 }
 
 export enum ProcessingMode {
@@ -78,3 +90,12 @@ export interface TextWatermark extends BaseWatermark {
 }
 
 export type Watermark = ImageWatermark | TextWatermark;
+
+export interface Seal {
+  id: string;
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}

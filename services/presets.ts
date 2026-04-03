@@ -1,4 +1,5 @@
 import { ProcessSettings } from '../types';
+import { createDefaultSettings } from './defaultSettings';
 
 export interface Preset {
     id: string;
@@ -20,6 +21,7 @@ export const builtInPresets: Preset[] = [
         description: '适合楷书作品，高阈值、边缘增强、去噪',
         descriptionEn: 'For Kaishu calligraphy, high threshold, edge enhancement, denoising',
         settings: {
+            ...createDefaultSettings(),
             threshold: 200,
             strength: 2,
             contrast: 20,
@@ -47,6 +49,7 @@ export const builtInPresets: Preset[] = [
         description: '适合行书作品，中阈值、平滑、降噪',
         descriptionEn: 'For Xingshu calligraphy, medium threshold, smoothing, denoising',
         settings: {
+            ...createDefaultSettings(),
             threshold: 170,
             strength: 1,
             contrast: 10,
@@ -74,6 +77,7 @@ export const builtInPresets: Preset[] = [
         description: '适合草书作品，低阈值、锐化、高对比度',
         descriptionEn: 'For Caoshu calligraphy, low threshold, sharpening, high contrast',
         settings: {
+            ...createDefaultSettings(),
             threshold: 150,
             strength: 0,
             contrast: 30,
@@ -101,6 +105,7 @@ export const builtInPresets: Preset[] = [
         description: '保留背景，高饱和度，适合摄影作品',
         descriptionEn: 'Keep background, high saturation, for photography',
         settings: {
+            ...createDefaultSettings(),
             threshold: 180,
             strength: 1,
             contrast: 15,

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ProcessSettings, Watermark } from '../types';
 
 interface HistoryState {
@@ -12,9 +12,19 @@ export const useHistory = (initialSettings: ProcessSettings, initialWatermarks: 
     ]);
     const [historyIndex, setHistoryIndex] = useState(0);
     const ignoreNextUpdate = useRef(false);
+    const historyRef = useRef(history);
+    const historyIndexRef = useRef(historyIndex);
 
     const canUndo = historyIndex > 0;
     const canRedo = historyIndex < history.length - 1;
+
+    useEffect(() => {
+        historyRef.current = history;
+    }, [history]);
+
+    useEffect(() => {
+        historyIndexRef.current = historyIndex;
+    }, [historyIndex]);
 
     const pushState = useCallback((settings: ProcessSettings, watermarks: Watermark[]) => {
         if (ignoreNextUpdate.current) {
@@ -23,44 +33,43 @@ export const useHistory = (initialSettings: ProcessSettings, initialWatermarks: 
         }
 
         setHistory(prev => {
-            // Remove all states after current index
-            const newHistory = prev.slice(0, historyIndex + 1);
+            const currentIndex = historyIndexRef.current;
+            const newHistory = prev.slice(0, currentIndex + 1);
 
-            // Add new state
             newHistory.push({ settings, watermarks });
 
-            // Limit to 20 states
             if (newHistory.length > 20) {
                 newHistory.shift();
-                return newHistory;
             }
 
+            const nextIndex = newHistory.length - 1;
+            historyIndexRef.current = nextIndex;
+            setHistoryIndex(nextIndex);
             return newHistory;
         });
-
-        setHistoryIndex(prev => {
-            const newIndex = Math.min(prev + 1, 19);
-            return newIndex;
-        });
-    }, [historyIndex]);
+    }, []);
 
     const undo = useCallback(() => {
-        if (canUndo) {
+        const nextIndex = historyIndexRef.current - 1;
+        if (nextIndex >= 0) {
             ignoreNextUpdate.current = true;
-            setHistoryIndex(prev => prev - 1);
-            return history[historyIndex - 1];
+            historyIndexRef.current = nextIndex;
+            setHistoryIndex(nextIndex);
+            return historyRef.current[nextIndex];
         }
         return null;
-    }, [canUndo, history, historyIndex]);
+    }, []);
 
     const redo = useCallback(() => {
-        if (canRedo) {
+        const nextIndex = historyIndexRef.current + 1;
+        if (nextIndex < historyRef.current.length) {
             ignoreNextUpdate.current = true;
-            setHistoryIndex(prev => prev + 1);
-            return history[historyIndex + 1];
+            historyIndexRef.current = nextIndex;
+            setHistoryIndex(nextIndex);
+            return historyRef.current[nextIndex];
         }
         return null;
-    }, [canRedo, history, historyIndex]);
+    }, []);
 
     return {
         pushState,

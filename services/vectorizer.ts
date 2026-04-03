@@ -1,7 +1,7 @@
-import ImageTracer from 'imagetracerjs';
-
 export const vectorizer = {
-    toSVG: (imageData: ImageData): string => {
+    toSVG: async (imageData: ImageData): Promise<string> => {
+        const { default: ImageTracer } = await import('imagetracerjs');
+
         // Preset for high detail black and white
         const options = {
             ltres: 0.1, // Linear error threshold

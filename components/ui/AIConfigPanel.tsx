@@ -8,12 +8,13 @@ import {
     removeToken,
     validateToken
 } from '../../services/aiProviders';
+import type { TranslationSet } from '../../services/translations';
 
 interface AIConfigPanelProps {
     selectedProvider: AIProvider;
     onProviderChange: (provider: AIProvider) => void;
     onConfigured: (hasValidToken: boolean) => void;
-    t: any;
+    t: TranslationSet;
 }
 
 /**
