@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Crop, Check, X, RotateCcw, Lock, LockOpen } from 'lucide-react';
+import type { TranslationSet } from '../services/translations';
 
 interface CropRect {
     x: number;
@@ -13,7 +14,7 @@ interface CropToolProps {
     isOpen: boolean;
     onClose: () => void;
     onApply: (croppedImageUrl: string) => void;
-    t: any;
+    t: TranslationSet;
 }
 
 export const CropTool: React.FC<CropToolProps> = ({

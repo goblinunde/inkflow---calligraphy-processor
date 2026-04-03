@@ -1,10 +1,11 @@
 import React from 'react';
 import { Keyboard, X } from 'lucide-react';
+import type { TranslationSet } from '../services/translations';
 
 interface ShortcutsPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    t: any;
+    t: TranslationSet;
 }
 
 const shortcuts = [

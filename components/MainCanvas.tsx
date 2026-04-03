@@ -1,15 +1,16 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Upload, Loader2, ImageIcon, Wand2 } from 'lucide-react';
-import { Watermark } from '../types';
+import type { Dimensions, Watermark } from '../types';
 import { WatermarkOverlay } from './WatermarkOverlay';
+import type { TranslationSet } from '../services/translations';
 
 interface MainCanvasProps {
-    t: any;
+    t: TranslationSet;
     originalImage: string | null;
     processedImage: string | null;
     isProcessing: boolean;
     onFileUpload: () => void;
-    originalDims?: { width: number, height: number };
+    originalDims?: Dimensions;
     watermarks?: Watermark[];
     selectedWatermarkId?: string | null;
     onUpdateWatermark?: (id: string, changes: Partial<Watermark>) => void;

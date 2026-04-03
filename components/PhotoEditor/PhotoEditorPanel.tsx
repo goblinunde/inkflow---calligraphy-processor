@@ -26,6 +26,7 @@ import { SelectionTools, SelectionTool } from './SelectionTools';
 import { AdvancedAdjustmentsPanel } from './AdvancedAdjustmentsPanel';
 import { inpaint, simpleInpaint, cloneStamp, spotHeal, localBlur, InpaintMethod } from '../../services/inpaintService';
 import { dodge, burn, sharpenBrush, denoiseBrush, removeRedEye, BrushSettings } from '../../services/retouchService';
+import type { TranslationSet } from '../../services/translations';
 
 export type PhotoEditorTool = 'select' | 'move' | 'clone' | 'spot' | 'blur' | 'inpaint' | 'dodge' | 'burn' | 'sharpen' | 'denoise' | 'redeye';
 
@@ -35,7 +36,7 @@ interface PhotoEditorPanelProps {
     imageHeight: number;
     onSave: (editedImageUrl: string) => void;
     onCancel: () => void;
-    t: any;
+    t: TranslationSet;
 }
 
 /**
@@ -569,4 +570,3 @@ function createMaskDataUrl(mask: Uint8Array, width: number, height: number): str
 }
 
 export default PhotoEditorPanel;
-

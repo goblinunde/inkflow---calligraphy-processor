@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, Download, Image as ImageIcon, Languages, HelpCircle, Info, ExternalLink, Code, Undo2, Redo2, Layers, Crop, Keyboard, Wand2 } from 'lucide-react';
 import { processImage } from './services/processor';
-import { restoreImageWithAI as restoreWithGeminiLegacy } from './services/geminiService';
-import { restoreImageWithAI, AIProvider, getToken, AI_PROVIDERS } from './services/aiProviders';
+import { restoreImageWithAI, AIProvider, getToken } from './services/aiProviders';
 import { vectorizer } from './services/vectorizer';
-import { ProcessSettings, Watermark, WatermarkType, ImageWatermark, TextWatermark } from './types';
+import { Dimensions, ProcessSettings, Watermark, WatermarkType } from './types';
 import { translations, Language } from './services/translations';
-import { applyColorPreset } from './services/colorPresets';
+import { applyColorPreset, colorPresets } from './services/colorPresets';
 import { Sidebar } from './components/Sidebar';
 import { MainCanvas } from './components/MainCanvas';
 import { Modal } from './components/ui/Modal';
@@ -14,20 +13,35 @@ import { useHistory } from './hooks/useHistory';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { Preset, addPreset, deletePreset, loadUserPresets } from './services/presets';
 import { ThemeSwitcher } from './components/ui/ThemeSwitcher';
-import { useTheme } from './hooks/useTheme';
-import { BatchProcessor } from './components/BatchProcessor';
-import { CropTool } from './components/CropTool';
-import { ShortcutsPanel } from './components/ShortcutsPanel';
-import { PhotoEditorPanel } from './components/PhotoEditor';
 import { rotateImage, flipHorizontal, flipVertical } from './services/transformService';
 import { applyEnhancePreset } from './services/quickEnhanceService';
+import { createDefaultSettings } from './services/defaultSettings';
+import { useWatermarks } from './hooks/useWatermarks';
+
+const CropTool = lazy(() =>
+  import('./components/CropTool').then((module) => ({ default: module.CropTool }))
+);
+const ShortcutsPanel = lazy(() =>
+  import('./components/ShortcutsPanel').then((module) => ({ default: module.ShortcutsPanel }))
+);
+const PhotoEditorPanel = lazy(() =>
+  import('./components/PhotoEditor').then((module) => ({ default: module.PhotoEditorPanel }))
+);
+
+const panelLoadingFallback = (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-[var(--fg-secondary)] shadow-xl">
+      Loading...
+    </div>
+  </div>
+);
 
 export default function App() {
   const [lang, setLang] = useState<Language>('zh'); // Default Chinese
   const t = translations[lang];
 
   const [originalImage, setOriginalImage] = useState<string | null>(null);
-  const [originalDims, setOriginalDims] = useState<{ width: number, height: number }>({ width: 0, height: 0 });
+  const [originalDims, setOriginalDims] = useState<Dimensions>({ width: 0, height: 0 });
 
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,14 +51,6 @@ export default function App() {
   // AI 提供商状态
   const [selectedAIProvider, setSelectedAIProvider] = useState<AIProvider>('gemini');
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
-  const [hasAIToken, setHasAIToken] = useState(false);
-
-  // Watermarks State
-  const [watermarks, setWatermarks] = useState<Watermark[]>([]);
-  const [selectedWatermarkId, setSelectedWatermarkId] = useState<string | null>(null);
-
-  // Upload Status State
-  const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   // Export State
   const [exportFormat, setExportFormat] = useState<'png' | 'jpeg' | 'webp' | 'svg'>('png');
@@ -53,7 +59,6 @@ export default function App() {
   // Modals state
   const [showHelp, setShowHelp] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
-  const [showBatchProcessor, setShowBatchProcessor] = useState(false);
   const [showCropTool, setShowCropTool] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showPhotoEditor, setShowPhotoEditor] = useState(false);
@@ -63,100 +68,35 @@ export default function App() {
 
   // Grid Settings
   const [gridEnabled, setGridEnabled] = useState(false);
-  const [gridSize, setGridSize] = useState(50);
   const [snapEnabled, setSnapEnabled] = useState(true);
 
   // Resolution State
   const [lockAspectRatio, setLockAspectRatio] = useState(true);
 
-  // Default Settings
-  const [settings, setSettings] = useState<ProcessSettings>({
-    threshold: 180,
-    strength: 1,
-    contrast: 0,
-    smoothing: true,
-    monochrome: false,
-    outputWidth: 0,
-    outputHeight: 0,
-    sharpness: 0,
-    denoise: 0,
-    adaptiveThreshold: false,
-    edgeEnhance: false,
-    removeBackground: true,
-    brightness: 0,
-    saturation: 0,
-    backgroundColor: 'transparent',
-    texture: 'none',
-    // Phase 5: Advanced Processing
-    blurType: 'box',
-    blurRadius: 0,
-    autoLevels: false,
-    levelsEnabled: false,
-    levelsInputBlack: 0,
-    levelsInputWhite: 255,
-    levelsGamma: 1,
-    histogramEqualization: false,
-    // Phase 3: 书法专用
-    sealExtraction: false,
-    preserveFlyingWhite: false,
-    edgeSmoothness: 0,
-    // Phase 6: 艺术滤镜
-    filter: null,
-    filterIntensity: 50
+  const [settings, setSettings] = useState<ProcessSettings>(() => createDefaultSettings());
+
+  const {
+    watermarks,
+    setWatermarks,
+    selectedWatermarkId,
+    setSelectedWatermarkId,
+    uploadStatus,
+    handleImageWatermarkUpload,
+    handleAddTextWatermark,
+    handleUpdateWatermark,
+    handleRemoveWatermark,
+    handleMoveWatermarkUp,
+    handleMoveWatermarkDown,
+    handleDuplicateWatermark,
+    handleReorderWatermarks
+  } = useWatermarks({
+    originalImage,
+    originalDims,
+    onError: setError
   });
 
   // History Management
   const { pushState, undo, redo, canUndo, canRedo } = useHistory(settings, watermarks);
-
-  // Keyboard Shortcuts
-  useKeyboardShortcuts({
-    onUndo: () => {
-      const prevState = undo();
-      if (prevState) {
-        setSettings(prevState.settings);
-        setWatermarks(prevState.watermarks);
-        setSelectedWatermarkId(null);
-      }
-    },
-    onRedo: () => {
-      const nextState = redo();
-      if (nextState) {
-        setSettings(nextState.settings);
-        setWatermarks(nextState.watermarks);
-        setSelectedWatermarkId(null);
-      }
-    },
-    onSave: () => {
-      if (processedImage) {
-        handleDownload();
-      }
-    },
-    onDelete: () => {
-      if (selectedWatermarkId) {
-        handleRemoveWatermark(selectedWatermarkId);
-      }
-    },
-    onEscape: () => {
-      setSelectedWatermarkId(null);
-    },
-    onCopy: () => {
-      if (selectedWatermarkId) {
-        const watermark = watermarks.find(w => w.id === selectedWatermarkId);
-        if (watermark) {
-          const newWatermark = {
-            ...watermark,
-            id: Date.now().toString(),
-            x: watermark.x + 20,
-            y: watermark.y + 20
-          };
-          setWatermarks(prev => [...prev, newWatermark]);
-        }
-      }
-    },
-    onShowShortcuts: () => {
-      setShowShortcuts(true);
-    }
-  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -171,6 +111,24 @@ export default function App() {
   useEffect(() => {
     setUserPresets(loadUserPresets());
   }, []);
+
+  const applyHistoryState = useCallback((nextState: { settings: ProcessSettings; watermarks: Watermark[] } | null) => {
+    if (!nextState) {
+      return;
+    }
+
+    setSettings(nextState.settings);
+    setWatermarks(nextState.watermarks);
+    setSelectedWatermarkId(null);
+  }, [setWatermarks]);
+
+  const handleUndo = useCallback(() => {
+    applyHistoryState(undo());
+  }, [applyHistoryState, undo]);
+
+  const handleRedo = useCallback(() => {
+    applyHistoryState(redo());
+  }, [applyHistoryState, redo]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -201,208 +159,18 @@ export default function App() {
     }
   };
 
-  // Watermark Upload Handler - Image Watermarks
-  const handleImageWatermarkUpload = (file: File) => {
-    // Validate original image uploaded first
-    if (!originalImage || originalDims.width === 0) {
-      setError('请先上传书法作品图片');
-      setUploadStatus({ type: 'error', message: '请先上传书法作品图片' });
-      setTimeout(() => setUploadStatus(null), 3000);
-      return;
-    }
-
-    const isSVG = file.type === 'image/svg+xml';
-    const isPNG = file.type === 'image/png';
-    const isJPEG = file.type === 'image/jpeg' || file.type === 'image/jpg';
-
-    if (!isSVG && !isPNG && !isJPEG) {
-      setError('仅支持 PNG, JPEG, SVG 格式');
-      setUploadStatus({ type: 'error', message: '仅支持 PNG, JPEG, SVG 格式' });
-      setTimeout(() => setUploadStatus(null), 3000);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onerror = () => {
-      setError('水印上传失败，请重试');
-      setUploadStatus({ type: 'error', message: '文件读取失败' });
-      setTimeout(() => setUploadStatus(null), 3000);
-    };
-
-    if (isSVG) {
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          createImageWatermark(e.target.result as string, 'svg');
-        }
-      };
-      reader.readAsText(file);
-    } else {
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          createImageWatermark(e.target.result as string, isPNG ? 'png' : 'jpeg');
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const createImageWatermark = (src: string, format: 'png' | 'jpeg' | 'svg') => {
-    if (format === 'svg') {
-      // For SVG, use a default size
-      const baseSize = Math.min(originalDims.width, originalDims.height) * 0.15;
-      const newWatermark: ImageWatermark = {
-        type: WatermarkType.IMAGE,
-        id: Date.now().toString(),
-        src,
-        x: originalDims.width / 2 - baseSize / 2,
-        y: originalDims.height / 2 - baseSize / 2,
-        width: baseSize,
-        height: baseSize,
-        format: 'svg',
-        rotation: 0,
-        opacity: 100
-      };
-      setWatermarks(prev => [...prev, newWatermark]);
-      setUploadStatus({ type: 'success', message: 'SVG 水印上传成功' });
-      setTimeout(() => setUploadStatus(null), 3000);
-    } else {
-      // For PNG/JPEG, get actual dimensions
-      const img = new Image();
-      img.onload = () => {
-        const baseSize = Math.min(originalDims.width, originalDims.height) * 0.15;
-        const ratio = img.width / img.height;
-
-        const newWatermark: ImageWatermark = {
-          type: WatermarkType.IMAGE,
-          id: Date.now().toString(),
-          src,
-          x: originalDims.width / 2 - baseSize / 2,
-          y: originalDims.height / 2 - baseSize / ratio / 2,
-          width: baseSize,
-          height: baseSize / ratio,
-          format,
-          rotation: 0,
-          opacity: 100
-        };
-        setWatermarks(prev => [...prev, newWatermark]);
-        setUploadStatus({ type: 'success', message: '图片水印上传成功' });
-        setTimeout(() => setUploadStatus(null), 3000);
-      };
-      img.onerror = () => {
-        setError('图片加载失败');
-        setUploadStatus({ type: 'error', message: '图片格式错误' });
-        setTimeout(() => setUploadStatus(null), 3000);
-      };
-      img.src = src;
-    }
-  };
-
-  // Text Watermark Handler
-  const handleAddTextWatermark = (text: string, fontSize: number, fontFamily: string, color: string) => {
-    if (!originalImage || originalDims.width === 0) {
-      setError('请先上传书法作品图片');
-      setUploadStatus({ type: 'error', message: '请先上传书法作品图片' });
-      setTimeout(() => setUploadStatus(null), 3000);
-      return;
-    }
-
-    if (!text.trim()) {
-      setError('请输入水印文字');
-      setUploadStatus({ type: 'error', message: '请输入水印文字' });
-      setTimeout(() => setUploadStatus(null), 3000);
-      return;
-    }
-
-    const newWatermark: TextWatermark = {
-      type: WatermarkType.TEXT,
-      id: Date.now().toString(),
-      text: text.trim(),
-      x: originalDims.width / 2,
-      y: originalDims.height / 2,
-      fontSize,
-      fontFamily,
-      color,
-      rotation: 0,
-      opacity: 100
-    };
-
-    setWatermarks(prev => [...prev, newWatermark]);
-    setUploadStatus({ type: 'success', message: '文字水印添加成功' });
-    setTimeout(() => setUploadStatus(null), 3000);
-  };
-
-  const handleUpdateWatermark = (id: string, changes: Partial<Watermark>) => {
-    setWatermarks(prev => prev.map(w => w.id === id ? { ...w, ...changes } : w));
-  };
-
-  const handleRemoveWatermark = (id: string) => {
-    setWatermarks(prev => prev.filter(w => w.id !== id));
-    if (selectedWatermarkId === id) {
-      setSelectedWatermarkId(null);
-    }
-  };
-
-  // 💡 图层排序：上移
-  const handleMoveWatermarkUp = (id: string) => {
-    setWatermarks(prev => {
-      const index = prev.findIndex(w => w.id === id);
-      if (index <= 0) return prev;
-      const newArr = [...prev];
-      [newArr[index - 1], newArr[index]] = [newArr[index], newArr[index - 1]];
-      return newArr;
-    });
-  };
-
-  // 💡 图层排序：下移
-  const handleMoveWatermarkDown = (id: string) => {
-    setWatermarks(prev => {
-      const index = prev.findIndex(w => w.id === id);
-      if (index < 0 || index >= prev.length - 1) return prev;
-      const newArr = [...prev];
-      [newArr[index], newArr[index + 1]] = [newArr[index + 1], newArr[index]];
-      return newArr;
-    });
-  };
-
-  // 💡 复制水印
-  const handleDuplicateWatermark = (id: string) => {
-    const watermark = watermarks.find(w => w.id === id);
-    if (watermark) {
-      const newWatermark = {
-        ...watermark,
-        id: Date.now().toString(),
-        x: watermark.x + 20,
-        y: watermark.y + 20
-      };
-      setWatermarks(prev => [...prev, newWatermark]);
-      setSelectedWatermarkId(newWatermark.id);
-    }
-  };
-
-  // 💡 拖拽重排水印图层
-  const handleReorderWatermarks = (fromIndex: number, toIndex: number) => {
-    setWatermarks(prev => {
-      const newArr = [...prev];
-      const [removed] = newArr.splice(fromIndex, 1);
-      newArr.splice(toIndex, 0, removed);
-      return newArr;
-    });
-  };
-
-  const handleSettingsChange = (key: keyof ProcessSettings, value: number | boolean | string) => {
+  const handleSettingsChange = useCallback(<K extends keyof ProcessSettings>(
+    key: K,
+    value: ProcessSettings[K]
+  ) => {
     setSettings(prev => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
   const handleApplyColorPreset = (presetId: string) => {
-    const { colorPresets } = require('./services/colorPresets');
-    const preset = colorPresets.find((p: any) => p.id === presetId);
+    const preset = colorPresets.find((item) => item.id === presetId);
     if (preset) {
-      console.log('Applying color preset:', preset.name);
       const newSettings = applyColorPreset(preset, settings);
       setSettings(newSettings);
-      // Image will auto-reprocess via useEffect
-    } else {
-      console.error('Color preset not found:', presetId);
     }
   };
 
@@ -457,15 +225,12 @@ export default function App() {
       const outCtx = outCanvas.getContext('2d')!;
       outCtx.putImageData(imageData, 0, 0);
       setProcessedImage(outCanvas.toDataURL('image/png'));
-
-      console.log('Quick action applied:', action);
     } catch (err) {
       console.error('Quick action failed:', err);
     }
   }, [processedImage]);
 
   const handleApplyPreset = (preset: Preset) => {
-    console.log('Applying preset:', preset.name);
     setSettings(preset.settings);
   };
 
@@ -478,7 +243,6 @@ export default function App() {
       settings: { ...settings }
     });
     setUserPresets(loadUserPresets());
-    console.log('Preset saved:', name);
   };
 
   const handleDeletePreset = (id: string) => {
@@ -501,33 +265,9 @@ export default function App() {
   };
 
   const handleReset = () => {
-    setSettings({
-      threshold: 180,
-      strength: 1,
-      contrast: 0,
-      smoothing: true,
-      monochrome: false,
-      outputWidth: originalDims.width,
-      outputHeight: originalDims.height,
-      sharpness: 0,
-      denoise: 0,
-      adaptiveThreshold: false,
-      edgeEnhance: false,
-      removeBackground: true,
-      brightness: 0,
-      saturation: 0,
-      backgroundColor: 'transparent',
-      texture: 'none',
-      blurType: 'box',
-      blurRadius: 0,
-      autoLevels: false,
-      levelsEnabled: false,
-      levelsInputBlack: 0,
-      levelsInputWhite: 255,
-      levelsGamma: 1,
-      histogramEqualization: false
-    });
+    setSettings(createDefaultSettings(originalDims));
     setWatermarks([]);
+    setSelectedWatermarkId(null);
   };
 
   const runProcessing = useCallback(async () => {
@@ -598,8 +338,9 @@ export default function App() {
         setAiSuggestion(result.suggestion);
       }
 
-    } catch (err: any) {
-      setError("AI 处理失败：" + (err.message || '未知错误'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '未知错误';
+      setError(`AI 处理失败：${message}`);
       console.error(err);
     } finally {
       setIsAiProcessing(false);
@@ -680,7 +421,7 @@ export default function App() {
     if (exportFormat === 'svg') {
       // SVG Export
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const svgString = vectorizer.toSVG(imageData);
+      const svgString = await vectorizer.toSVG(imageData);
       const blob = new Blob([svgString], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -727,6 +468,32 @@ export default function App() {
     }
   };
 
+  useKeyboardShortcuts({
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onSave: () => {
+      if (processedImage) {
+        handleDownload();
+      }
+    },
+    onDelete: () => {
+      if (selectedWatermarkId) {
+        handleRemoveWatermark(selectedWatermarkId);
+      }
+    },
+    onEscape: () => {
+      setSelectedWatermarkId(null);
+    },
+    onCopy: () => {
+      if (selectedWatermarkId) {
+        handleDuplicateWatermark(selectedWatermarkId);
+      }
+    },
+    onShowShortcuts: () => {
+      setShowShortcuts(true);
+    }
+  });
+
   return (
     // 主题适配背景
     <div className="flex h-screen flex-col font-sans overflow-hidden selection:bg-indigo-500/30 gradient-mesh transition-colors duration-300">
@@ -762,14 +529,7 @@ export default function App() {
           {/* Undo/Redo Buttons */}
           <div className="flex items-center gap-1">
             <button
-              onClick={() => {
-                const prevState = undo();
-                if (prevState) {
-                  setSettings(prevState.settings);
-                  setWatermarks(prevState.watermarks);
-                  setSelectedWatermarkId(null);
-                }
-              }}
+              onClick={handleUndo}
               disabled={!canUndo}
               className="p-2 rounded-lg text-[var(--fg-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title={`${t.undo || '撤销'} (Ctrl+Z)`}
@@ -777,14 +537,7 @@ export default function App() {
               <Undo2 className="h-4 w-4" />
             </button>
             <button
-              onClick={() => {
-                const nextState = redo();
-                if (nextState) {
-                  setSettings(nextState.settings);
-                  setWatermarks(nextState.watermarks);
-                  setSelectedWatermarkId(null);
-                }
-              }}
+              onClick={handleRedo}
               disabled={!canRedo}
               className="p-2 rounded-lg text-[var(--fg-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title={`${t.redo || '重做'} (Ctrl+Y)`}
@@ -870,7 +623,7 @@ export default function App() {
           aiSuggestion={aiSuggestion}
           selectedAIProvider={selectedAIProvider}
           onAIProviderChange={setSelectedAIProvider}
-          onAIConfigured={setHasAIToken}
+          onAIConfigured={() => undefined}
           originalDims={originalDims}
           lockAspectRatio={lockAspectRatio}
           setLockAspectRatio={setLockAspectRatio}
@@ -909,7 +662,7 @@ export default function App() {
           onRemoveWatermark={handleRemoveWatermark}
           onSelectWatermark={setSelectedWatermarkId}
           gridEnabled={gridEnabled}
-          gridSize={gridSize}
+          gridSize={50}
           snapEnabled={snapEnabled}
           texture={settings.texture}
         />
@@ -979,26 +732,44 @@ export default function App() {
       </Modal>
 
       {/* Shortcuts Panel */}
-      <ShortcutsPanel
-        isOpen={showShortcuts}
-        onClose={() => setShowShortcuts(false)}
-        t={t}
-      />
+      <Suspense fallback={panelLoadingFallback}>
+        {showShortcuts && (
+          <ShortcutsPanel
+            isOpen={showShortcuts}
+            onClose={() => setShowShortcuts(false)}
+            t={t}
+          />
+        )}
+      </Suspense>
 
       {/* Photo Editor */}
-      {showPhotoEditor && originalImage && (
-        <PhotoEditorPanel
-          imageUrl={processedImage || originalImage}
-          imageWidth={originalDims.width}
-          imageHeight={originalDims.height}
-          onSave={(editedUrl) => {
-            setProcessedImage(editedUrl);
-            setShowPhotoEditor(false);
-          }}
-          onCancel={() => setShowPhotoEditor(false)}
-          t={t}
-        />
-      )}
+      <Suspense fallback={panelLoadingFallback}>
+        {showCropTool && (processedImage || originalImage) && (
+          <CropTool
+            imageUrl={processedImage || originalImage || ''}
+            isOpen={showCropTool}
+            onClose={() => setShowCropTool(false)}
+            onApply={(croppedImageUrl) => {
+              setProcessedImage(croppedImageUrl);
+              setShowCropTool(false);
+            }}
+            t={t}
+          />
+        )}
+        {showPhotoEditor && originalImage && (
+          <PhotoEditorPanel
+            imageUrl={processedImage || originalImage}
+            imageWidth={originalDims.width}
+            imageHeight={originalDims.height}
+            onSave={(editedUrl) => {
+              setProcessedImage(editedUrl);
+              setShowPhotoEditor(false);
+            }}
+            onCancel={() => setShowPhotoEditor(false)}
+            t={t}
+          />
+        )}
+      </Suspense>
 
     </div>
   );
